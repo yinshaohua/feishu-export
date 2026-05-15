@@ -1,0 +1,24 @@
+{
+  "name": "feishu-export",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "grab": "tsx src/cli.ts",
+    "grab:interactive": "tsx src/cli.ts --interactive",
+    "grab:file": "tsx src/cli.ts --file ./urls.txt --out ./output",
+    "test:normalize": "tsx test/normalize-regression.ts",
+    "test:docs": "tsx src/cli.ts --file ./urls.txt --out ./output",
+    "test:docs:check": "tsx test/docs-regression.ts",
+    "test:all": "npm run build && npm run test:normalize && npm run test:docs:check"
+  },
+  "dependencies": {
+    "playwright": "^1.55.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}

@@ -118,9 +118,11 @@ FEISHU_EXPORT_DEBUG=1 npm run test:docs
 | heading | heading1–6，外加正文启发式升格 |
 | paragraph | 普通正文段落 |
 | ordered / bullet list | 基础列表，以及连续编号段落折叠 |
-| image | 导出为远程图片 Markdown |
+| image | 下载到本地 assets/ 目录，Markdown 引用本地路径；表格内图片同样支持 |
 | sheet | 导出为飞书 base 链接，附带文本摘要；费用区间类 sheet 尝试恢复为 Markdown table |
 | divider | 保留为分隔线 |
+| code block | 保留语言标注，原样输出为 fenced code block |
+| table | 原生表格导出为 Markdown table；含图片的单元格以 `（图片）` 占位，图片附于表格后 |
 
 ### 暂未支持
 
@@ -129,5 +131,3 @@ FEISHU_EXPORT_DEBUG=1 npm run test:docs
 | file / attachment | 缺少稳定样本，暂未实现 |
 | iframe / embed | 缺少稳定样本，暂未实现 |
 | todo list | 类型已预留，暂未专项提取 |
-| code block | 当前回退为普通文本 |
-| table | 原生表格暂未专项提取；内嵌 sheet 已支持 |

@@ -377,9 +377,135 @@ function buildSheetSummaryBlocks(record: RuntimeBlock, sourceDocUrl: string | un
   return blocks;
 }
 
+/** Map Feishu language labels to standard markdown fence identifiers. */
+function normalizeCodeLanguage(lang: string | undefined): string {
+  if (!lang) return '';
+  const lower = lang.toLowerCase().trim();
+  const map: Record<string, string> = {
+    markdown: 'markdown',
+    md: 'markdown',
+    javascript: 'javascript',
+    js: 'javascript',
+    typescript: 'typescript',
+    ts: 'typescript',
+    python: 'python',
+    py: 'python',
+    java: 'java',
+    go: 'go',
+    golang: 'go',
+    rust: 'rust',
+    c: 'c',
+    'c++': 'cpp',
+    cpp: 'cpp',
+    'c#': 'csharp',
+    csharp: 'csharp',
+    shell: 'bash',
+    bash: 'bash',
+    sh: 'bash',
+    zsh: 'bash',
+    sql: 'sql',
+    html: 'html',
+    css: 'css',
+    json: 'json',
+    yaml: 'yaml',
+    yml: 'yaml',
+    xml: 'xml',
+    ruby: 'ruby',
+    rb: 'ruby',
+    php: 'php',
+    swift: 'swift',
+    kotlin: 'kotlin',
+    scala: 'scala',
+    r: 'r',
+    matlab: 'matlab',
+    text: '',
+    plain: '',
+    plaintext: '',
+    'plain text': '',
+  };
+  return map[lower] ?? lower;
+}
+
+/** Regex that matches image placeholders emitted by getCellText in the page script. */
+const IMG_PLACEHOLDER_RE = /^__IMG__:([^:]+):([^:]+):(\d+):(\d+)$/;
+
+/**
+ * Parse a cell value: if it's an image placeholder, return an image DocBlock;
+ * otherwise return a plain string (the cell text).
+ */
+function parseCellValue(cell: string): DocBlock | string {
+  const m = IMG_PLACEHOLDER_RE.exec(cell.trim());
+  if (!m) return cell;
+  const [, token, mountNodeToken, w, h] = m;
+  return {
+    type: 'image',
+    url: buildFeishuImageUrl(token, mountNodeToken, Number(w) || undefined, Number(h) || undefined),
+    alt: 'image',
+  };
+}
+
+/**
+ * Expand a table that may contain image-placeholder cells into a sequence of
+ * DocBlocks.  Pure-text tables become a single `table` block (unchanged).
+ * Tables with image cells are emitted as: table (text-only columns) + image
+ * blocks for each image cell, with a caption indicating row/col position.
+ *
+ * Strategy: replace image cells with "(图片)" in the table, then append the
+ * actual image blocks after the table so they are downloaded and localised.
+ */
+function expandTableWithImages(tableRows: string[][]): DocBlock[] {
+  let hasImages = false;
+  for (const row of tableRows) {
+    for (const cell of row) {
+      if (IMG_PLACEHOLDER_RE.test(cell.trim())) {
+        hasImages = true;
+        break;
+      }
+    }
+    if (hasImages) break;
+  }
+
+  if (!hasImages) {
+    return [{ type: 'table', rows: tableRows }];
+  }
+
+  const textRows: string[][] = [];
+  const imageBlocks: DocBlock[] = [];
+
+  for (let r = 0; r < tableRows.length; r++) {
+    const textRow: string[] = [];
+    for (let c = 0; c < tableRows[r].length; c++) {
+      const cell = tableRows[r][c];
+      const parsed = parseCellValue(cell);
+      if (typeof parsed === 'string') {
+        textRow.push(parsed);
+      } else {
+        // Replace image cell with a placeholder label in the table
+        textRow.push('（图片）');
+        imageBlocks.push(parsed);
+      }
+    }
+    textRows.push(textRow);
+  }
+
+  const blocks: DocBlock[] = [{ type: 'table', rows: textRows }];
+  blocks.push(...imageBlocks);
+  return blocks;
+}
+
 function mapRecordToBlocks(record: RuntimeBlock, sourceDocUrl: string | undefined, sheetPayloads: Map<string, string[]>): DocBlock[] {
-  const text = normalizeText(record.text);
   const recordType = record.type;
+
+  // Code blocks: preserve raw text with newlines, use language from data
+  if (recordType === 'code') {
+    const codeText = record.text; // already has newlines preserved
+    if (!codeText) return [];
+    // Normalize the language label to a common markdown fence identifier
+    const lang = normalizeCodeLanguage(record.codeLanguage);
+    return [{ type: 'code', text: codeText, language: lang }];
+  }
+
+  const text = normalizeText(record.text);
   if (recordType === 'heading1') return text ? [{ type: 'heading', level: 1, text }] : [];
   if (recordType === 'heading2') return text ? [{ type: 'heading', level: 2, text }] : [];
   if (recordType === 'heading3') return text ? [{ type: 'heading', level: 3, text }] : [];
@@ -400,7 +526,7 @@ function mapRecordToBlocks(record: RuntimeBlock, sourceDocUrl: string | undefine
     return buildSheetSummaryBlocks(record, sourceDocUrl, sheetPayloads);
   }
   if (recordType === 'table' && record.tableRows && record.tableRows.length > 0) {
-    return [{ type: 'table', rows: record.tableRows }];
+    return expandTableWithImages(record.tableRows);
   }
   if (recordType === 'divider') return [{ type: 'divider' }];
   if (recordType === 'grid' || recordType === 'grid_column' || recordType === 'page') return [];
@@ -514,16 +640,19 @@ const EXTRACT_DOCUMENT_SCRIPT = String.raw`
     return match ? match[1] : '';
   }
 
-  function attributedTextToStringInPage(source) {
+  function attributedTextToStringInPage(source, preserveNewlines) {
     if (!source || typeof source !== 'object' || !source.text || typeof source.text !== 'object') return '';
-    return Object.entries(source.text)
+    var raw = Object.entries(source.text)
       .filter(([key, value]) => /^\d+$/.test(key) && typeof value === 'string')
       .sort((a, b) => Number(a[0]) - Number(b[0]))
       .map(([, value]) => value)
       .join('')
-      .replace(/\u200b/g, '')
-      .replace(/[ \t]+/g, ' ')
-      .trim();
+      .replace(/\u200b/g, '');
+    if (preserveNewlines) {
+      // For code blocks: only collapse horizontal whitespace runs, keep newlines
+      return raw.replace(/[ \t]+/g, ' ').replace(/^ | $/gm, '').replace(/^\n+|\n+$/g, '');
+    }
+    return raw.replace(/[ \t]+/g, ' ').trim();
   }
 
   function getSelectionTextareaText() {
@@ -635,7 +764,11 @@ const EXTRACT_DOCUMENT_SCRIPT = String.raw`
       const parentId = typeof data.parent_id === 'string' ? data.parent_id : '';
       const childIds = Array.isArray(data.children) ? data.children : [];
       const textSource = data.text && data.text.initialAttributedTexts ? data.text.initialAttributedTexts : data.initialAttributedTexts || data.text;
-      const text = attributedTextToStringInPage(textSource);
+      // Code blocks need newlines preserved; other blocks collapse whitespace
+      const isCodeBlock = type === 'code';
+      const text = attributedTextToStringInPage(textSource, isCodeBlock);
+      // Language for code blocks (e.g. "Markdown", "Python", "JavaScript")
+      const codeLanguage = isCodeBlock && typeof data.language === 'string' && data.language ? data.language.toLowerCase() : undefined;
 
       const imageData = data.image && typeof data.image === 'object' ? data.image : null;
       const imageCaption = imageData ? attributedTextToStringInPage(imageData.caption && imageData.caption.text ? imageData.caption.text : imageData.caption) : '';
@@ -654,15 +787,27 @@ const EXTRACT_DOCUMENT_SCRIPT = String.raw`
           if (!cellEntry) return '';
           const cellData = cellEntry.data && typeof cellEntry.data === 'object' ? cellEntry.data : cellEntry;
           const cellChildren = Array.isArray(cellData.children) ? cellData.children : [];
-          return cellChildren.map(function(textId) {
-            const textEntry = store[textId];
-            if (!textEntry) return '';
-            const textData = textEntry.data && typeof textEntry.data === 'object' ? textEntry.data : textEntry;
-            const textSource = textData.text && textData.text.initialAttributedTexts
-              ? textData.text.initialAttributedTexts
-              : textData.text;
+          return cellChildren.map(function(childId) {
+            const childEntry = store[childId];
+            if (!childEntry) return '';
+            const childData = childEntry.data && typeof childEntry.data === 'object' ? childEntry.data : childEntry;
+            const childType = normalizeType(childData.type);
+            // Image block inside a table cell: emit a placeholder token
+            if (childType === 'image') {
+              const imgData = childData.image && typeof childData.image === 'object' ? childData.image : null;
+              if (imgData && typeof imgData.token === 'string' && imgData.token) {
+                const w = typeof imgData.width === 'number' ? imgData.width : 0;
+                const h = typeof imgData.height === 'number' ? imgData.height : 0;
+                // Use the cell block id as mount_node_token (same as top-level image handling)
+                return '__IMG__:' + imgData.token + ':' + cellBlockId + ':' + w + ':' + h;
+              }
+              return '';
+            }
+            const textSource = childData.text && childData.text.initialAttributedTexts
+              ? childData.text.initialAttributedTexts
+              : childData.text;
             return attributedTextToStringInPage(textSource);
-          }).join('');
+          }).join('\n').trim();
         }
 
         if (rowsId.length > 0 && colsId.length > 0) {
@@ -685,6 +830,7 @@ const EXTRACT_DOCUMENT_SCRIPT = String.raw`
         version: typeof entry.version === 'number' ? entry.version : null,
         childCount: childIds.length,
         text,
+        codeLanguage,
         imageToken: imageData && typeof imageData.token === 'string' ? imageData.token : undefined,
         imageName: imageData && typeof imageData.name === 'string' ? imageData.name : undefined,
         imageCaption,
@@ -776,6 +922,7 @@ type RuntimeBlock = {
   version: number | null;
   childCount: number;
   text: string;
+  codeLanguage?: string;
   imageToken?: string;
   imageName?: string;
   imageCaption?: string;

@@ -2,7 +2,13 @@ import path from 'node:path';
 import { chromium, type BrowserContext, type Page } from 'playwright';
 import { log } from './utils.js';
 
-const FEISHU_DOC_PATTERNS = [/feishu\.cn\/docx\//i, /feishu\.cn\/docs?\//i, /larksuite\.com\/docx\//i];
+const FEISHU_DOC_PATTERNS = [
+  /feishu\.cn\/docx\//i,
+  /feishu\.cn\/docs?\//i,
+  /feishu\.cn\/wiki\//i,
+  /larksuite\.com\/docx\//i,
+  /larksuite\.com\/wiki\//i,
+];
 
 const GET_MAIN_TEXT_LENGTH_SCRIPT = String.raw`
 (() => {
@@ -38,9 +44,11 @@ const SCROLL_TO_TOP_SCRIPT = String.raw`
 
 const GET_RUNTIME_METRICS_SCRIPT = String.raw`
 (() => {
-  const match = location.pathname.match(/\/docx\/([^/?#]+)/i);
-  const docId = match ? match[1] : '';
   const dataRoot = window.DATA && window.DATA.clientVars && window.DATA.clientVars.data;
+  const isWiki = /\/wiki\//i.test(location.pathname);
+  const docId = isWiki
+    ? (dataRoot && typeof dataRoot.id === 'string' ? dataRoot.id : '')
+    : (() => { const m = location.pathname.match(/\/(?:docx|wiki)\/([^/?#]+)/i); return m ? m[1] : ''; })();
   const blockMap = dataRoot && typeof dataRoot === 'object' ? dataRoot.block_map : null;
   const pageEntry = blockMap && docId ? blockMap[docId] : null;
   const pageData = pageEntry && pageEntry.data && typeof pageEntry.data === 'object' ? pageEntry.data : null;

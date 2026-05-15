@@ -501,7 +501,13 @@ const EXTRACT_DOCUMENT_SCRIPT = String.raw`
   }
 
   function getDocId() {
-    const match = location.pathname.match(/\/docx\/([^/?#]+)/i);
+    // wiki 页面：根节点 ID 存在 window.DATA.clientVars.data.id，不等于 URL token
+    const isWiki = /\/wiki\//i.test(location.pathname);
+    if (isWiki) {
+      const dataId = window.DATA && window.DATA.clientVars && window.DATA.clientVars.data && window.DATA.clientVars.data.id;
+      if (dataId && typeof dataId === 'string') return dataId;
+    }
+    const match = location.pathname.match(/\/(?:docx|wiki)\/([^/?#]+)/i);
     return match ? match[1] : '';
   }
 

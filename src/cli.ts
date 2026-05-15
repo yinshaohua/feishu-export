@@ -12,9 +12,12 @@ import {
 } from './browser.js';
 import { collectDebugSnapshot } from './debug.js';
 import { extractDocument, startSheetPayloadCapture } from './extract.js';
+import { downloadDocumentImages, localizeImageBlocks } from './images.js';
 import { toMarkdown } from './markdown.js';
 import type { CliOptions } from './types.js';
 import { createStableFilePath, ensureDir, log, prompt, readUrlList } from './utils.js';
+import { extractBitable } from './bitable.js';
+import { saveBitableMarkdown, saveBitableExcel } from './bitable-output.js';
 
 const verboseDebug = process.env.FEISHU_EXPORT_DEBUG === '1';
 
@@ -58,6 +61,25 @@ function validateOptions(options: CliOptions): void {
   if (enabledModes !== 1) {
     throw new Error('必须且只能选择一种模式：--interactive / --url / --file');
   }
+}
+
+// ── Bitable helpers ───────────────────────────────────────────────────────────
+
+/** Returns true if the URL points to a Feishu Bitable (多维表格). */
+function isBitableUrl(url: string): boolean {
+  return /\/base\/[A-Za-z0-9]+/.test(url);
+}
+
+/**
+ * Navigate to a Bitable URL, extract its data, and write .md + .xlsx files.
+ */
+async function captureBitablePage(page: Page, url: string, outDir: string): Promise<void> {
+  log(`[bitable] 正在提取多维表格: ${url}`);
+  const table = await extractBitable(page, url);
+  const mdPath = await saveBitableMarkdown(table, outDir);
+  const xlsxPath = await saveBitableExcel(table, outDir);
+  log(`[bitable] 已保存: ${mdPath}`);
+  log(`[bitable] 已保存: ${xlsxPath}`);
 }
 
 async function saveMarkdown(outDir: string, title: string, markdown: string): Promise<string> {
@@ -164,6 +186,11 @@ async function captureCurrentPage(page: Page, outDir: string): Promise<string> {
   if (retryNotes.length > 0) {
     doc.debugNotes = [...(doc.debugNotes ?? []), ...retryNotes];
   }
+
+  // 下载图片到本地，替换 blocks 中的 URL
+  const imageMap = await downloadDocumentImages(page, doc.blocks, outDir);
+  doc.blocks = localizeImageBlocks(doc.blocks, imageMap);
+
   const markdown = toMarkdown(doc);
   return await saveMarkdown(outDir, doc.title, markdown);
 }
@@ -193,6 +220,11 @@ async function runSingleUrl(options: CliOptions): Promise<void> {
   const { context, page } = await launchPersistentBrowser(options.profileDir);
 
   try {
+    if (isBitableUrl(options.url!)) {
+      await captureBitablePage(page, options.url!, options.outDir);
+      return;
+    }
+
     await gotoIfNeeded(page, options.url);
     log('如果页面要求登录，请先在打开的浏览器中完成登录。');
     const answer = await prompt('确认已打开目标文档后按 Enter 继续: ');
@@ -205,11 +237,24 @@ async function runSingleUrl(options: CliOptions): Promise<void> {
   }
 }
 
+/** Returns true if the current page URL looks like a Feishu login/passport page. */
+function isLoginPage(url: string): boolean {
+  return /\/(passport|login|sso)\//i.test(url) || url.includes('login') || url.includes('passport');
+}
+
 async function ensureLoggedInForBatch(page: Page, firstUrl: string): Promise<void> {
   log('检查是否已有可复用的飞书登录态...');
   await gotoIfNeeded(page, firstUrl);
 
-  if (page.url() === firstUrl || page.url().includes('/docx/')) {
+  // Wait for any client-side redirects to settle before inspecting the URL.
+  try {
+    await page.waitForLoadState('networkidle', { timeout: 8_000 });
+  } catch {
+    // networkidle timeout is acceptable — just check the URL as-is.
+  }
+
+  const finalUrl = page.url();
+  if (!isLoginPage(finalUrl)) {
     log('检测到已有登录态，直接开始批量抓取。');
     return;
   }
@@ -235,9 +280,14 @@ async function runFileMode(options: CliOptions): Promise<void> {
       log(`[${i + 1}/${urls.length}] 打开: ${url}`);
 
       try {
-        await gotoIfNeeded(page, url);
-        const savedPath = await captureCurrentPage(page, options.outDir);
-        log(`[${i + 1}/${urls.length}] 已保存: ${savedPath}`);
+        if (isBitableUrl(url)) {
+          await captureBitablePage(page, url, options.outDir);
+          log(`[${i + 1}/${urls.length}] 已完成 (bitable): ${url}`);
+        } else {
+          await gotoIfNeeded(page, url);
+          const savedPath = await captureCurrentPage(page, options.outDir);
+          log(`[${i + 1}/${urls.length}] 已保存: ${savedPath}`);
+        }
       } catch (error) {
         log(`[${i + 1}/${urls.length}] 失败: ${(error as Error).message}`);
       }

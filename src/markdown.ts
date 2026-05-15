@@ -5,8 +5,7 @@ function escapeMarkdownImageAlt(text: string): string {
 }
 
 function toMarkdownLinkTarget(url: string): string {
-  const normalized = url.trim().replace(/ /g, '%20');
-  return `<${normalized}>`;
+  return url.trim().replace(/ /g, '%20');
 }
 
 function renderBlock(block: DocBlock): string {
@@ -18,7 +17,11 @@ function renderBlock(block: DocBlock): string {
     case 'image': {
       const alt = escapeMarkdownImageAlt(block.alt?.trim() || 'image');
       const target = toMarkdownLinkTarget(block.url);
-      return `[查看图片](${target})\n\n![${alt}](${target})`;
+      // 本地路径直接嵌入图片；远程 URL（下载失败时的回退）附加备用链接
+      const isLocal = !block.url.startsWith('http');
+      return isLocal
+        ? `![${alt}](${target})`
+        : `[查看图片](${target})\n\n![${alt}](${target})`;
     }
     case 'link':
       return `[${block.text}](${block.url})`;

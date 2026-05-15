@@ -50,7 +50,10 @@ async function main(): Promise<void> {
     };
   }));
 
-  for (const url of urls) {
+  // Only check docx URLs — Bitable (/base/) URLs are handled by bitable-regression.ts
+  const docUrls = urls.filter((url) => url.includes('/docx/'));
+
+  for (const url of docUrls) {
     const matches = docs
       .filter((doc) => doc.sourceUrl === url)
       .sort((a, b) => b.capturedAt - a.capturedAt);

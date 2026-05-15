@@ -1,4 +1,0 @@
-{"id":"714f3c51-68e9-475e-b96f-72fa05224c68","ts":"2026-05-14T05:49:35.474Z","severity":"warning","message":"[db] FTS5 unavailable — memory queries will use LIKE fallback: no such module: fts5","source":"workflow-logger","read":false}
-{"id":"c721a5f8-3f3c-4420-84dc-1d1998b202e5","ts":"2026-05-14T05:50:47.645Z","severity":"warning","message":"[memory-store] FTS5 unavailable — using LIKE fallback scan (consider enabling FTS5)","source":"workflow-logger","read":false}
-{"id":"b38e4b44-10c3-4416-a776-ea7886bd43c8","ts":"2026-05-14T11:14:42.641Z","severity":"info","message":"Auto-mode is not running.","source":"notify","read":false}
-{"id":"f2296bba-9b76-437f-bc4c-89d01867b27e","ts":"2026-05-15T02:03:33.942Z","severity":"warning","message":"[db] FTS5 unavailable — memory queries will use LIKE fallback: no such module: fts5","source":"workflow-logger","read":false}

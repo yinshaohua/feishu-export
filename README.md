@@ -1,17 +1,17 @@
 # feishu-export
 
-把可查看的飞书文档抓取为 Markdown，便于导入 Obsidian。
+把可查看的飞书文档和多维表格抓取为 Markdown，便于导入 Obsidian；多维表格同时导出为 Excel (.xlsx)。
 
 ## 当前能力
 
 - `--interactive`：手动打开文档，按 Enter 连续抓取
-- `--url`：抓取单个飞书文档 URL
-- `--file`：从 URL 列表批量抓取
-- 同标题文档默认覆盖同名 Markdown 文件，避免旧导出残留混淆
+- `--url`：抓取单个飞书文档或多维表格 URL
+- `--file`：从 URL 列表批量抓取（文档和多维表格 URL 可混合）
 - 持久化浏览器 profile，避免每次重复登录
 - 自动滚动长文档
 - 输出 Markdown frontmatter（含 `source_url` / `captured_at` / `debug_notes`）
 - 对标题 / 正文 / 编号列表做结构语义归一化
+- **多维表格**：同时输出 `.md`（Markdown 表格）和 `.xlsx`（Excel 工作簿）
 - 结构归一化回归脚本：`test/normalize-regression.ts`
 - 真实文档导出回归脚本：`test/docs-regression.ts`
 
@@ -70,6 +70,22 @@ npm run grab:interactive -- --out=./output
 ```bash
 npm run grab -- --url=https://xxx.feishu.cn/docx/AAA --out=./output
 ```
+
+### 2b) 抓取多维表格
+
+```powershell
+# PowerShell / cmd / bash — URL 含 & 时必须加引号
+npm run grab -- --url="https://xxx.feishu.cn/base/TOKEN?table=tblXxx&view=vewXxx" --out=./output
+```
+
+> **PowerShell 常见错误**：如果看到 `view=vewXxx: The term 'view=...' is not recognized`，
+> 说明 URL 没有加引号，`&` 被 shell 当作命令分隔符截断了。加上引号即可。
+
+输出两个文件：
+- `output/TOKEN_YYYY-MM-DD.md` — Markdown 表格（含 YAML front-matter）
+- `output/TOKEN_YYYY-MM-DD.xlsx` — Excel 工作簿（加粗列头、URL 超链接、冻结首行）
+
+> **注意**：当前每次最多导出 200 条记录（飞书 clientvars API 限制）。超过 200 条的表格会被截断，截断时不会报错。
 
 ### 3) 批量抓取
 

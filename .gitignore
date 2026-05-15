@@ -3,6 +3,12 @@ dist/
 .playwright-profile/
 output/
 
+# GSD runtime directory
+.gsd.migrating/
+
+# URL list variants (keep urls.txt, ignore dated variants)
+urls-*.txt
+
 # ── GSD baseline (auto-generated) ──
 .gsd
 .gsd-id

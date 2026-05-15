@@ -399,6 +399,9 @@ function mapRecordToBlocks(record: RuntimeBlock, sourceDocUrl: string | undefine
   if (recordType === 'sheet' && record.sheetToken) {
     return buildSheetSummaryBlocks(record, sourceDocUrl, sheetPayloads);
   }
+  if (recordType === 'table' && record.tableRows && record.tableRows.length > 0) {
+    return [{ type: 'table', rows: record.tableRows }];
+  }
   if (recordType === 'divider') return [{ type: 'divider' }];
   if (recordType === 'grid' || recordType === 'grid_column' || recordType === 'page') return [];
 
@@ -638,6 +641,42 @@ const EXTRACT_DOCUMENT_SCRIPT = String.raw`
       const imageCaption = imageData ? attributedTextToStringInPage(imageData.caption && imageData.caption.text ? imageData.caption.text : imageData.caption) : '';
       const sheetToken = typeof data.token === 'string' && type === 'sheet' ? data.token : undefined;
 
+      // ── docx native table ────────────────────────────────────────────────────
+      // Feishu docx tables use rows_id + columns_id + cell_set instead of children.
+      let tableRows = undefined;
+      if (type === 'table') {
+        const rowsId = Array.isArray(data.rows_id) ? data.rows_id : [];
+        const colsId = Array.isArray(data.columns_id) ? data.columns_id : [];
+        const cellSet = data.cell_set && typeof data.cell_set === 'object' ? data.cell_set : {};
+
+        function getCellText(cellBlockId) {
+          const cellEntry = store[cellBlockId];
+          if (!cellEntry) return '';
+          const cellData = cellEntry.data && typeof cellEntry.data === 'object' ? cellEntry.data : cellEntry;
+          const cellChildren = Array.isArray(cellData.children) ? cellData.children : [];
+          return cellChildren.map(function(textId) {
+            const textEntry = store[textId];
+            if (!textEntry) return '';
+            const textData = textEntry.data && typeof textEntry.data === 'object' ? textEntry.data : textEntry;
+            const textSource = textData.text && textData.text.initialAttributedTexts
+              ? textData.text.initialAttributedTexts
+              : textData.text;
+            return attributedTextToStringInPage(textSource);
+          }).join('');
+        }
+
+        if (rowsId.length > 0 && colsId.length > 0) {
+          tableRows = rowsId.map(function(rowId) {
+            return colsId.map(function(colId) {
+              const cellKey = rowId + colId;
+              const cellInfo = cellSet[cellKey];
+              if (!cellInfo || !cellInfo.block_id) return '';
+              return getCellText(cellInfo.block_id);
+            });
+          });
+        }
+      }
+
       blocks.push({
         key: blockId,
         id: typeof entry.id === 'string' ? entry.id : blockId,
@@ -653,6 +692,7 @@ const EXTRACT_DOCUMENT_SCRIPT = String.raw`
         imageHeight: imageData && typeof imageData.height === 'number' ? imageData.height : undefined,
         sheetToken,
         sheetTitle: type === 'sheet' ? text : undefined,
+        tableRows,
       });
 
       for (const childId of childIds) {
@@ -743,6 +783,8 @@ type RuntimeBlock = {
   imageHeight?: number;
   sheetToken?: string;
   sheetTitle?: string;
+  /** Populated for type === 'table': rows × cols matrix of cell text */
+  tableRows?: string[][];
 };
 
 type RuntimeStoreSummary = {

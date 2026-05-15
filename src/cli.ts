@@ -225,10 +225,12 @@ async function runSingleUrl(options: CliOptions): Promise<void> {
       return;
     }
 
-    await gotoIfNeeded(page, options.url);
-    log('如果页面要求登录，请先在打开的浏览器中完成登录。');
-    const answer = await prompt('确认已打开目标文档后按 Enter 继续: ');
-    if (answer.toLowerCase() === 'q') return;
+    const ready = await navigateAndWaitForLoginIfNeeded(
+      page,
+      options.url!,
+      '登录完成后按 Enter 继续抓取，输入 q 退出: ',
+    );
+    if (!ready) return;
 
     const savedPath = await captureCurrentPage(page, options.outDir);
     log(`已保存: ${savedPath}`);
@@ -242,25 +244,28 @@ function isLoginPage(url: string): boolean {
   return /\/(passport|login|sso)\//i.test(url) || url.includes('login') || url.includes('passport');
 }
 
-async function ensureLoggedInForBatch(page: Page, firstUrl: string): Promise<void> {
-  log('检查是否已有可复用的飞书登录态...');
-  await gotoIfNeeded(page, firstUrl);
+/**
+ * Navigate to `url`, wait for client-side redirects to settle, then prompt
+ * for login only if the page ended up on a login/passport page.
+ * Returns true if the page is ready to scrape, false if the user aborted.
+ */
+async function navigateAndWaitForLoginIfNeeded(page: Page, url: string, promptMessage: string): Promise<boolean> {
+  await gotoIfNeeded(page, url);
 
-  // Wait for any client-side redirects to settle before inspecting the URL.
   try {
     await page.waitForLoadState('networkidle', { timeout: 8_000 });
   } catch {
-    // networkidle timeout is acceptable — just check the URL as-is.
+    // networkidle timeout is acceptable — check the URL as-is.
   }
 
   const finalUrl = page.url();
   if (!isLoginPage(finalUrl)) {
-    log('检测到已有登录态，直接开始批量抓取。');
-    return;
+    return true;
   }
 
-  log('未检测到可用登录态，请先在打开的浏览器中完成登录。');
-  await prompt('登录完成后按 Enter 开始批量抓取: ');
+  log('页面需要登录，请在打开的浏览器中完成登录。');
+  const answer = await prompt(promptMessage);
+  return answer.toLowerCase() !== 'q';
 }
 
 async function runFileMode(options: CliOptions): Promise<void> {
@@ -272,8 +277,7 @@ async function runFileMode(options: CliOptions): Promise<void> {
   const { context, page } = await launchPersistentBrowser(options.profileDir);
 
   try {
-    log(`共 ${urls.length} 篇文档。首次运行若需要，会自动检查并提示登录。`);
-    await ensureLoggedInForBatch(page, urls[0]);
+    log(`共 ${urls.length} 篇文档，开始批量抓取。`);
 
     for (let i = 0; i < urls.length; i += 1) {
       const url = urls[i];
@@ -281,10 +285,21 @@ async function runFileMode(options: CliOptions): Promise<void> {
 
       try {
         if (isBitableUrl(url)) {
+          const ready = await navigateAndWaitForLoginIfNeeded(
+            page,
+            url,
+            `登录完成后按 Enter 继续抓取第 ${i + 1} 篇，输入 q 退出: `,
+          );
+          if (!ready) break;
           await captureBitablePage(page, url, options.outDir);
           log(`[${i + 1}/${urls.length}] 已完成 (bitable): ${url}`);
         } else {
-          await gotoIfNeeded(page, url);
+          const ready = await navigateAndWaitForLoginIfNeeded(
+            page,
+            url,
+            `登录完成后按 Enter 继续抓取第 ${i + 1} 篇，输入 q 退出: `,
+          );
+          if (!ready) break;
           const savedPath = await captureCurrentPage(page, options.outDir);
           log(`[${i + 1}/${urls.length}] 已保存: ${savedPath}`);
         }

@@ -16,7 +16,7 @@ import { downloadDocumentImages, localizeImageBlocks } from './images.js';
 import { toMarkdown } from './markdown.js';
 import type { CliOptions } from './types.js';
 import { createStableFilePath, ensureDir, log, prompt, readUrlList } from './utils.js';
-import { extractBitable } from './bitable.js';
+import { extractBitable, BitableAuthError } from './bitable.js';
 import { saveBitableMarkdown, saveBitableExcel } from './bitable-output.js';
 
 const verboseDebug = process.env.FEISHU_EXPORT_DEBUG === '1';
@@ -72,14 +72,34 @@ function isBitableUrl(url: string): boolean {
 
 /**
  * Navigate to a Bitable URL, extract its data, and write .md + .xlsx files.
+ * If the session has expired, navigate to the login page, wait for the user
+ * to log in, then retry automatically.
  */
 async function captureBitablePage(page: Page, url: string, outDir: string): Promise<void> {
   log(`[bitable] 正在提取多维表格: ${url}`);
-  const table = await extractBitable(page, url);
-  const mdPath = await saveBitableMarkdown(table, outDir);
-  const xlsxPath = await saveBitableExcel(table, outDir);
-  log(`[bitable] 已保存: ${mdPath}`);
-  log(`[bitable] 已保存: ${xlsxPath}`);
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    try {
+      const table = await extractBitable(page, url);
+      const mdPath = await saveBitableMarkdown(table, outDir);
+      const xlsxPath = await saveBitableExcel(table, outDir);
+      log(`[bitable] 已保存: ${mdPath}`);
+      log(`[bitable] 已保存: ${xlsxPath}`);
+      return;
+    } catch (err) {
+      if (err instanceof BitableAuthError && attempt === 1) {
+        log('飞书登录已过期，正在打开登录页面...');
+        await page.goto('https://my.feishu.cn/', { waitUntil: 'domcontentloaded' });
+        // Wait for client-side redirect to settle
+        try { await page.waitForLoadState('networkidle', { timeout: 6_000 }); } catch { /* ok */ }
+        const answer = await prompt('请在浏览器中完成登录，完成后按 Enter 继续；输入 q 退出: ');
+        if (answer.toLowerCase() === 'q') return;
+        // retry
+        continue;
+      }
+      throw err;
+    }
+  }
 }
 
 async function saveMarkdown(outDir: string, title: string, markdown: string): Promise<string> {

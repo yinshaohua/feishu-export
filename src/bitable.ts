@@ -13,6 +13,13 @@ import { promisify } from 'node:util';
 import type { Page, Response } from 'playwright';
 import type { BitableField, BitableRecord, BitableTable, CellValue } from './types.js';
 
+/** Thrown when the Bitable API returns an auth error (code=5 / Login Required). */
+export class BitableAuthError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BitableAuthError';
+  }
+}
 const gunzip = promisify(zlib.gunzip);
 
 // ── Raw API shapes ────────────────────────────────────────────────────────────
@@ -251,31 +258,53 @@ export async function extractBitable(
   const tableId = parsed.searchParams.get('table') ?? '';
   const viewId = parsed.searchParams.get('view') ?? undefined;
 
-  // Set up response interception before navigation
-  let resolveClientVars!: (r: Response) => void;
-  const clientVarsPromise = new Promise<Response>((res) => {
+  // Use page.route to intercept the clientvars request.
+  // page.route handlers run synchronously within the request lifecycle, so the
+  // response body is guaranteed to be available — unlike page.on('response', ...)
+  // where the CDP buffer may already be released by the time we call .json().
+  let resolveClientVars!: (json: ClientVarsResponse) => void;
+  let rejectClientVars!: (err: Error) => void;
+  const clientVarsPromise = new Promise<ClientVarsResponse>((res, rej) => {
     resolveClientVars = res;
+    rejectClientVars = rej;
   });
 
-  const handler = (response: Response) => {
-    if (response.url().includes('/clientvars?')) {
-      resolveClientVars(response);
+  await page.route('**/clientvars?**', async (route) => {
+    // Fetch the real response, read the body, then let the page see it normally.
+    const response = await route.fetch();
+    try {
+      const json: ClientVarsResponse = await response.json();
+      resolveClientVars(json);
+    } catch (err: unknown) {
+      rejectClientVars(err instanceof Error ? err : new Error(String(err)));
     }
-  };
-  page.on('response', handler);
+    await route.fulfill({ response });
+  });
 
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded' });
 
     // Wait up to 30 s for the clientvars response
-    const cvResponse = await Promise.race([
+    const cvJson = await Promise.race([
       clientVarsPromise,
       new Promise<never>((_, reject) =>
         setTimeout(() => reject(new Error('clientvars response timeout after 30s')), 30_000),
       ),
     ]);
+    // Check for auth / API errors before touching data
+    const cvAny = cvJson as unknown as Record<string, unknown>;
+    if (cvAny?.code !== undefined && cvAny.code !== 0) {
+      const isAuthError = cvAny.code === 5 || String(cvAny.msg).toLowerCase().includes('login');
+      if (isAuthError) {
+        throw new BitableAuthError(
+          `clientvars 返回 code=${cvAny.code} msg="${cvAny.msg ?? ''}" — 需要登录`,
+        );
+      }
+      throw new Error(
+        `clientvars 返回错误 code=${cvAny.code} msg="${cvAny.msg ?? ''}"`,
+      );
+    }
 
-    const cvJson: ClientVarsResponse = await cvResponse.json();
     if (!cvJson?.data?.table) {
       throw new Error(
         'clientvars response missing data.table — the table may be empty or access-restricted',
@@ -325,6 +354,6 @@ export async function extractBitable(
 
     return { tableId, title, baseToken, fields, records };
   } finally {
-    page.off('response', handler);
+    await page.unroute('**/clientvars?**');
   }
 }

@@ -15,9 +15,11 @@ import { extractDocument, startSheetPayloadCapture } from './extract.js';
 import { downloadDocumentImages, localizeImageBlocks } from './images.js';
 import { toMarkdown } from './markdown.js';
 import type { CliOptions } from './types.js';
-import { createStableFilePath, ensureDir, log, prompt, readUrlList } from './utils.js';
+import { createStableFilePath, ensureDir, log, prompt, readUrlList, sanitizeFileName } from './utils.js';
 import { extractBitable, BitableAuthError } from './bitable.js';
 import { saveBitableMarkdown, saveBitableExcel } from './bitable-output.js';
+import { crawlFolderTree, extractFolderName, flattenTree, type FolderItem } from './folder.js';
+import { downloadAttachment } from './attachments.js';
 
 const verboseDebug = process.env.FEISHU_EXPORT_DEBUG === '1';
 
@@ -42,6 +44,10 @@ function parseArgs(argv: string[]): CliOptions {
       options.file = argv[++i];
     } else if (arg.startsWith('--file=')) {
       options.file = arg.slice('--file='.length);
+    } else if (arg === '--folder') {
+      options.folder = argv[++i];
+    } else if (arg.startsWith('--folder=')) {
+      options.folder = arg.slice('--folder='.length);
     } else if (arg === '--out') {
       options.outDir = path.resolve(argv[++i]);
     } else if (arg.startsWith('--out=')) {
@@ -57,9 +63,9 @@ function parseArgs(argv: string[]): CliOptions {
 }
 
 function validateOptions(options: CliOptions): void {
-  const enabledModes = [options.interactive, Boolean(options.url), Boolean(options.file)].filter(Boolean).length;
+  const enabledModes = [options.interactive, Boolean(options.url), Boolean(options.file), Boolean(options.folder)].filter(Boolean).length;
   if (enabledModes !== 1) {
-    throw new Error('必须且只能选择一种模式：--interactive / --url / --file');
+    throw new Error('必须且只能选择一种模式：--interactive / --url / --file / --folder');
   }
 }
 
@@ -332,6 +338,122 @@ async function runFileMode(options: CliOptions): Promise<void> {
   }
 }
 
+// ── Folder mode ───────────────────────────────────────────────────────────────
+
+/**
+ * 处理单个目录树条目：
+ *   - folder  → 只建目录，子条目由 processTree 递归处理
+ *   - doc/sheet/bitable → 调用现有导出逻辑
+ *   - file    → 下载附件
+ */
+async function processFolderItem(
+  page: Page,
+  item: FolderItem,
+  itemDir: string,
+  stats: { success: number; failed: number; skipped: number },
+): Promise<void> {
+  const safeName = sanitizeFileName(item.name);
+
+  if (item.type === 'folder') {
+    await ensureDir(itemDir);
+    return;
+  }
+
+  if (item.type === 'file') {
+    await ensureDir(itemDir);
+    const result = await downloadAttachment(page, item.token, item.name, itemDir);
+    if (result.localPath) {
+      stats.success++;
+    } else {
+      stats.failed++;
+    }
+    return;
+  }
+
+  // doc / sheet / bitable / unknown → 导出为 Markdown
+  await ensureDir(itemDir);
+  try {
+    if (item.type === 'bitable' || isBitableUrl(item.url)) {
+      await captureBitablePage(page, item.url, itemDir);
+    } else {
+      const ready = await navigateAndWaitForLoginIfNeeded(
+        page,
+        item.url,
+        '登录完成后按 Enter 继续，输入 q 退出: ',
+      );
+      if (!ready) {
+        stats.skipped++;
+        return;
+      }
+      const savedPath = await captureCurrentPage(page, itemDir);
+      log(`[folder] 已保存: ${savedPath}`);
+    }
+    stats.success++;
+  } catch (err) {
+    log(`[folder] 失败 (${safeName}): ${(err as Error).message}`);
+    stats.failed++;
+  }
+}
+
+/**
+ * 递归处理目录树，在 baseDir 下按层级建目录并导出/下载每个条目。
+ */
+async function processTree(
+  page: Page,
+  items: FolderItem[],
+  baseDir: string,
+  stats: { success: number; failed: number; skipped: number },
+  depth = 0,
+): Promise<void> {
+  for (const item of items) {
+    const safeName = sanitizeFileName(item.name);
+    // 文件夹在 baseDir 下建子目录；文件/文档保存到 baseDir 本身
+    const itemDir = item.type === 'folder' ? path.join(baseDir, safeName) : baseDir;
+
+    log(`[folder] ${'  '.repeat(depth)}[${item.type}] ${item.name}`);
+    await processFolderItem(page, item, itemDir, stats);
+
+    if (item.type === 'folder' && item.children && item.children.length > 0) {
+      await processTree(page, item.children, itemDir, stats, depth + 1);
+    }
+  }
+}
+
+async function runFolderMode(options: CliOptions): Promise<void> {
+  const { context, page } = await launchPersistentBrowser(options.profileDir);
+
+  try {
+    log(`[folder] 开始遍历文件夹: ${options.folder}`);
+
+    // 先导航到文件夹，获取名称
+    await page.goto(options.folder!, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2000);
+    const folderName = await extractFolderName(page);
+    log(`[folder] 文件夹名称: ${folderName}`);
+
+    // 在 outDir 下建以文件夹名命名的根目录
+    const rootDir = path.join(options.outDir, sanitizeFileName(folderName));
+    await ensureDir(rootDir);
+
+    // 遍历目录树
+    log('[folder] 正在遍历目录树...');
+    const tree = await crawlFolderTree(page, options.folder!, 0, { extraWaitMs: 1000 });
+
+    const flatItems = flattenTree(tree);
+    log(`[folder] 目录树遍历完成，共 ${flatItems.length} 个条目`);
+
+    // 处理所有条目
+    const stats = { success: 0, failed: 0, skipped: 0 };
+    log('[folder] 开始导出/下载...');
+    await processTree(page, tree, rootDir, stats);
+
+    log(`\n[folder] 完成！成功: ${stats.success}，失败: ${stats.failed}，跳过: ${stats.skipped}`);
+    log(`[folder] 输出目录: ${rootDir}`);
+  } finally {
+    await context.close();
+  }
+}
+
 async function main(): Promise<void> {
   const options = parseArgs(process.argv.slice(2));
   validateOptions(options);
@@ -346,6 +468,11 @@ async function main(): Promise<void> {
 
   if (options.url) {
     await runSingleUrl(options);
+    return;
+  }
+
+  if (options.folder) {
+    await runFolderMode(options);
     return;
   }
 

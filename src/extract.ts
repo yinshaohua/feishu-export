@@ -5,12 +5,15 @@ import { normalizeStructuralBlocks } from './normalize.js';
 
 const verboseDebug = process.env.FEISHU_EXPORT_DEBUG === '1';
 
+/** 飞书注入的零宽/不可见 Unicode 字符（水印追踪用），需在所有文本处理中剔除 */
+const FEISHU_INVISIBLE_RE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u206A-\u206F\uFEFF\u00AD\u034F\u115F\u1160\u17B4\u17B5\u180B-\u180D\u180E\u3164\uFFA0]/g;
+
 function normalizeText(text: string | null | undefined): string {
-  return (text ?? '').replace(/\u200b/g, '').replace(/\s+/g, ' ').trim();
+  return (text ?? '').replace(FEISHU_INVISIBLE_RE, '').replace(/\s+/g, ' ').trim();
 }
 
 function normalizeLooseText(text: string | null | undefined): string {
-  return (text ?? '').replace(/\u200b/g, '').replace(/[ \t]+/g, ' ').trim();
+  return (text ?? '').replace(FEISHU_INVISIBLE_RE, '').replace(/[ \t]+/g, ' ').trim();
 }
 
 function splitParagraphs(text: string): string[] {

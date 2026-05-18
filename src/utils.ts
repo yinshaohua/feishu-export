@@ -13,6 +13,10 @@ export async function ensureDir(dir: string): Promise<void> {
 
 export function sanitizeFileName(name: string): string {
   const cleaned = name
+    // 去除飞书注入的零宽/不可见 Unicode 字符（用于水印追踪）
+    // 覆盖范围：零宽空格、零宽非连接符、零宽连接符、变体选择符、
+    // 软连字符、左右标记、Mongolian 分隔符、Hangul 填充等
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u206A-\u206F\uFEFF\u00AD\u034F\u115F\u1160\u17B4\u17B5\u180B-\u180D\u180E\u3164\uFFA0]/g, '')
     .replace(/[\\/:*?"<>|]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()

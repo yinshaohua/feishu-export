@@ -25,6 +25,8 @@ export interface CliOptions {
   interactive: boolean;
   url?: string;
   file?: string;
+  /** 飞书云盘文件夹 URL，触发 --folder 模式 */
+  folder?: string;
   outDir: string;
   profileDir: string;
 }

@@ -7,10 +7,12 @@
 - `--interactive`：手动打开文档，按 Enter 连续抓取
 - `--url`：抓取单个飞书文档或多维表格 URL
 - `--file`：从 URL 列表批量抓取（文档和多维表格 URL 可混合）
+- `--folder`：遍历飞书云盘文件夹，按目录层级导出全部文档并下载附件
 - 持久化浏览器 profile，避免每次重复登录
 - 自动滚动长文档
 - 输出 Markdown frontmatter（含 `source_url` / `captured_at`）
 - 对标题 / 正文 / 编号列表做结构语义归一化
+- 自动过滤飞书注入的零宽追踪字符，文件名和正文均干净输出
 - **多维表格**：同时输出 `.md`（Markdown 表格）和 `.xlsx`（Excel 工作簿）
 
 ## 安装
@@ -27,6 +29,20 @@ npx playwright install chromium
 ```bash
 npm run grab:interactive -- --out=./output
 ```
+
+### 抓取飞书云盘文件夹
+
+```bash
+npm run grab -- --folder='https://xxx.feishu.cn/drive/folder/TOKEN' --out=./output
+```
+
+遍历整个文件夹目录树，在 `output/<文件夹名>/` 下按层级建目录，并：
+
+- 文档 / 多维表格 → 导出为 `.md`（多维表格同时输出 `.xlsx`）
+- 附件（非图片文件）→ 原名下载到对应目录
+- 图片 → 随文档一起下载到 `assets/` 子目录
+
+完成后输出统计：成功 / 失败 / 跳过数量。
 
 ### 抓取单个文档
 
@@ -128,6 +144,6 @@ FEISHU_EXPORT_DEBUG=1 npm run test:docs
 
 | 块类型 | 说明 |
 |--------|------|
-| file / attachment | 缺少稳定样本，暂未实现 |
+| file / attachment | 通过 `--folder` 模式下载；单文档模式暂未支持 |
 | iframe / embed | 缺少稳定样本，暂未实现 |
 | todo list | 类型已预留，暂未专项提取 |

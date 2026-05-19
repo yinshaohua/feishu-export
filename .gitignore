@@ -8,6 +8,7 @@ output/
 
 # URL list variants (keep urls.txt, ignore dated variants)
 urls-*.txt
+usrs/
 
 # ── GSD baseline (auto-generated) ──
 .gsd

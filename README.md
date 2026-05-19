@@ -25,16 +25,18 @@ npx playwright install chromium
 
 ## 用法
 
+> **npm 参数转发说明**：为兼容部分 Windows PowerShell + npm 版本，本文档统一使用 `npm run <script> -- -- <args>`。多出来的裸 `--` 会被当前 CLI 忽略，在只需要单个 `--` 的环境中也可以正常使用。
+
 ### 交互式连续抓取
 
 ```bash
-npm run grab:interactive -- --out=./output
+npm run grab:interactive -- -- --out=./output
 ```
 
 ### 抓取飞书云盘文件夹
 
 ```bash
-npm run grab -- --folder="https://xxx.feishu.cn/drive/folder/TOKEN" --out=./output
+npm run grab -- -- --folder="https://xxx.feishu.cn/drive/folder/TOKEN" --out=./output
 ```
 
 遍历整个文件夹目录树，在 `output/<文件夹名>/` 下按层级建目录，并：
@@ -48,14 +50,14 @@ npm run grab -- --folder="https://xxx.feishu.cn/drive/folder/TOKEN" --out=./outp
 ### 抓取单个文档
 
 ```bash
-npm run grab -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/docx/AAA" --out=./output
+npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/docx/AAA" --out=./output
 ```
 
 ### 抓取多维表格
 
 ```powershell
 # URL 含 & 时必须加引号
-npm run grab -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/base/TOKEN?table=tblXxx&view=vewXxx" --out=./output
+npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/base/TOKEN?table=tblXxx&view=vewXxx" --out=./output
 ```
 
 > **PowerShell 注意**：URL 含 `&` 时必须加引号，否则 `&` 会被 shell 当作命令分隔符截断。
@@ -77,7 +79,7 @@ npm run grab:file
 等价命令：
 
 ```bash
-npm run grab -- --profile-dir="C:\tmp\feishu-profile" --file=./urls.txt --out=./output
+npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --file=./urls.txt --out=./output
 ```
 
 批量模式会先自动检查登录态：已登录则直接开始抓取，未登录则提示先在浏览器中完成登录。

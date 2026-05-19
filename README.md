@@ -8,6 +8,7 @@
 - `--url`：抓取单个飞书文档或多维表格 URL
 - `--file`：从 URL 列表批量抓取（文档和多维表格 URL 可混合）
 - `--folder`：遍历飞书云盘文件夹，按目录层级导出全部文档并下载附件
+- `--profile-dir`：浏览器缓存目录，这里保存浏览器登录状态
 - 持久化浏览器 profile，避免每次重复登录
 - 自动滚动长文档
 - 输出 Markdown frontmatter（含 `source_url` / `captured_at`）
@@ -33,7 +34,7 @@ npm run grab:interactive -- --out=./output
 ### 抓取飞书云盘文件夹
 
 ```bash
-npm run grab -- --folder='https://xxx.feishu.cn/drive/folder/TOKEN' --out=./output
+npm run grab -- --folder="https://xxx.feishu.cn/drive/folder/TOKEN" --out=./output
 ```
 
 遍历整个文件夹目录树，在 `output/<文件夹名>/` 下按层级建目录，并：
@@ -47,14 +48,14 @@ npm run grab -- --folder='https://xxx.feishu.cn/drive/folder/TOKEN' --out=./outp
 ### 抓取单个文档
 
 ```bash
-npm run grab -- --url=https://xxx.feishu.cn/docx/AAA --out=./output
+npm run grab -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/docx/AAA" --out=./output
 ```
 
 ### 抓取多维表格
 
 ```powershell
 # URL 含 & 时必须加引号
-npm run grab -- --url="https://xxx.feishu.cn/base/TOKEN?table=tblXxx&view=vewXxx" --out=./output
+npm run grab -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/base/TOKEN?table=tblXxx&view=vewXxx" --out=./output
 ```
 
 > **PowerShell 注意**：URL 含 `&` 时必须加引号，否则 `&` 会被 shell 当作命令分隔符截断。
@@ -76,7 +77,7 @@ npm run grab:file
 等价命令：
 
 ```bash
-npm run grab -- --file=./urls.txt --out=./output
+npm run grab -- --profile-dir="C:\tmp\feishu-profile" --file=./urls.txt --out=./output
 ```
 
 批量模式会先自动检查登录态：已登录则直接开始抓取，未登录则提示先在浏览器中完成登录。

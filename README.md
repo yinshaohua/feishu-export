@@ -30,13 +30,13 @@ npx playwright install chromium
 ### 交互式连续抓取
 
 ```bash
-npm run grab:interactive -- -- --out=./output
+npm run grab:interactive -- -- --profile-dir="C:\tmp\feishu-profile" --out=./output
 ```
 
 ### 抓取飞书云盘文件夹
 
 ```bash
-npm run grab -- -- --folder="https://xxx.feishu.cn/drive/folder/TOKEN" --out=./output
+npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --folder="https://xxx.feishu.cn/drive/folder/TOKEN" --out=./output
 ```
 
 遍历整个文件夹目录树，在 `output/<文件夹名>/` 下按层级建目录，并：

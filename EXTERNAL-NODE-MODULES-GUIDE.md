@@ -20,6 +20,32 @@
 缓存：C:\local_data\my-project\.cache
 ```
 
+## 环境初始化脚本
+
+本项目提供 `setenv.ps1` 和 `setenv.cmd`。在新的终端会话里，先在项目根目录执行初始化脚本。
+
+PowerShell：
+
+```powershell
+. ./setenv.ps1
+```
+
+cmd：
+
+```cmd
+setenv.cmd
+```
+
+脚本会：
+
+- 按当前项目目录名推导外置根目录，例如 `C:/local_data/my-project`
+- 创建外置根目录
+- 同步 `package.json`、`package-lock.json`、`.npmrc` 到外置根目录
+- 设置 `EXTERNAL_NODE_MODULES` 和 `NODE_PATH`
+- 把 `C:/local_data/my-project/node_modules/.bin` 放到当前会话的 `PATH` 最前面
+
+脚本是幂等的：同一个会话里重复执行不会反复追加相同的 `.bin` 路径；如果项目依赖声明发生变化，重复执行会重新同步 manifest。
+
 ## package.json 要点
 
 把 npm 的安装位置指向外部目录：
@@ -42,6 +68,7 @@
 关键点：
 
 - `npm install --prefix <外置目录>` 会把依赖装到外置目录。
+- 外置目录必须有 `package.json`；先执行本项目的 `setenv` 脚本会自动同步 npm manifest。
 - 运行 TypeScript 时，不要写 `tsx src/cli.ts`，而是显式引用外置 `tsx` loader。
 - 如果运行纯 JS，可以直接 `node src/index.js`；但它依赖的包仍需能从入口处被解析到，复杂项目建议用 wrapper。
 
@@ -108,7 +135,7 @@ output/
 ## 迁移步骤
 
 1. 删除项目内 `node_modules`。
-2. 创建外置目录。
+2. 在项目根目录执行 `setenv` 脚本，创建外置目录并同步 npm manifest。
 3. 执行 `npm install --prefix <外置目录>`。
 4. 修改 npm scripts，禁止依赖 `./node_modules/.bin`。
 5. 把输出、缓存、profile 路径改到外置目录。

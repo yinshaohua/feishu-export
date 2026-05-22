@@ -20,7 +20,14 @@
 . ./setenv.ps1
 ```
 
-它会设置外部依赖目录相关环境变量，之后所有 `npm run` 命令都按这套方式工作。
+它会：
+
+- 创建外置项目根目录，例如 `C:\local_data\feishu-export`
+- 同步 `package.json`、`package-lock.json`、`.npmrc` 到外置项目根目录
+- 设置外部依赖目录相关环境变量
+- 把外置 `node_modules/.bin` 放到当前会话的 `PATH` 最前面
+
+同一个 PowerShell 会话里可以重复执行；脚本会先去重再更新 `PATH`，不会反复追加相同路径。之后所有 `npm run` 命令都按这套方式工作。
 
 ## 外部依赖准备
 
@@ -36,12 +43,15 @@ C:\local_data\feishu-export\node_modules
 C:\local_data\my-project\node_modules
 ```
 
-首次准备依赖时，`--prefix` 指向对应的项目外置根目录：
+首次准备依赖时，先运行 `setenv`，让脚本创建外置项目根目录并同步 npm manifest，然后 `--prefix` 指向对应的项目外置根目录：
 
 ```powershell
+. ./setenv.ps1
 npm --prefix C:\local_data\feishu-export install
 npx --prefix C:\local_data\feishu-export playwright install chromium
 ```
+
+> 不要直接在一个全新的空外置目录里运行 `npm --prefix ... install`。npm 需要外置根目录里存在 `package.json`；`setenv.ps1` 会自动从项目目录同步它。
 
 ## 常用命令
 

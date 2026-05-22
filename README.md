@@ -1,152 +1,147 @@
 # feishu-export
 
-把可查看的飞书文档和多维表格抓取为 Markdown，便于导入 Obsidian；多维表格同时导出为 Excel (.xlsx)。
+把可查看的飞书文档、飞书云盘文件夹、多维表格导出为本地文件：
 
-## 功能
+- 文档 → Markdown
+- 多维表格 → Markdown + Excel (`.xlsx`)
+- 文件夹 → 按目录层级导出文档并下载附件
 
-- `--interactive`：手动打开文档，按 Enter 连续抓取
-- `--url`：抓取单个飞书文档或多维表格 URL
-- `--file`：从 URL 列表批量抓取（文档和多维表格 URL 可混合）
-- `--folder`：遍历飞书云盘文件夹，按目录层级导出全部文档并下载附件
-- `--profile-dir`：浏览器缓存目录，这里保存浏览器登录状态
-- 持久化浏览器 profile，避免每次重复登录
-- 自动滚动长文档
-- 输出 Markdown frontmatter（含 `source_url` / `captured_at`）
-- 对标题 / 正文 / 编号列表做结构语义归一化
-- 自动过滤飞书注入的零宽追踪字符，文件名和正文均干净输出
-- **多维表格**：同时输出 `.md`（Markdown 表格）和 `.xlsx`（Excel 工作簿）
+## 当前使用方式
 
-## 安装
+本项目默认采用：
 
-```bash
-npm install
-npx playwright install chromium
+- **项目目录在 OneDrive 下**
+- **`node_modules` 放在项目目录外**
+- **输出目录放在项目目录外**
+
+每次打开新 PowerShell 会话后，先执行：
+
+```powershell
+. ./setenv.ps1
 ```
 
-## 用法
+它会设置外部依赖目录相关环境变量，之后所有 `npm run` 命令都按这套方式工作。
 
-> **npm 参数转发说明**：为兼容部分 Windows PowerShell + npm 版本，本文档统一使用 `npm run <script> -- -- <args>`。多出来的裸 `--` 会被当前 CLI 忽略，在只需要单个 `--` 的环境中也可以正常使用。
+## 外部依赖准备
 
-### 交互式连续抓取
+当前约定的外部依赖目录是：
 
-```bash
-npm run grab:interactive -- -- --profile-dir="C:\tmp\feishu-profile" --out=./output
+```text
+C:\local_data\feishu-export\node_modules
 ```
 
-### 抓取飞书云盘文件夹
+首次准备依赖：
 
-```bash
-npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --folder="https://xxx.feishu.cn/drive/folder/TOKEN" --out=./output
+```powershell
+npm --prefix C:\local_data\feishu-export install
+npx --prefix C:\local_data\feishu-export playwright install chromium
 ```
 
-遍历整个文件夹目录树，在 `output/<文件夹名>/` 下按层级建目录，并：
+## 常用命令
 
-- 文档 / 多维表格 → 导出为 `.md`（多维表格同时输出 `.xlsx`）
-- 附件（非图片文件）→ 原名下载到对应目录
-- 图片 → 随文档一起下载到 `assets/` 子目录
-
-完成后输出统计：成功 / 失败 / 跳过数量。
+> PowerShell 下统一使用 `npm run <script> -- -- <args>`。
 
 ### 抓取单个文档
 
-```bash
-npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/docx/AAA" --out=./output
+```powershell
+npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/docx/AAA" --out="C:\local_data\feishu-export\output"
 ```
 
 ### 抓取多维表格
 
 ```powershell
-# URL 含 & 时必须加引号
-npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/base/TOKEN?table=tblXxx&view=vewXxx" --out=./output
+npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/base/TOKEN?table=tblXxx&view=vewXxx" --out="C:\local_data\feishu-export\output"
 ```
 
-> **PowerShell 注意**：URL 含 `&` 时必须加引号，否则 `&` 会被 shell 当作命令分隔符截断。
+> URL 含 `&` 时必须加引号。
 
-输出两个文件：
-- `output/TOKEN_YYYY-MM-DD.md` — Markdown 表格（含 YAML front-matter）
-- `output/TOKEN_YYYY-MM-DD.xlsx` — Excel 工作簿（加粗列头、URL 超链接、冻结首行）
+### 交互式连续抓取
 
-> **注意**：当前每次最多导出 200 条记录（飞书 API 限制），超过 200 条的表格会被截断。
+```powershell
+npm run grab:interactive -- -- --profile-dir="C:\tmp\feishu-profile" --out="C:\local_data\feishu-export\output"
+```
 
 ### 批量抓取
 
-把需要抓取的飞书文档 URL 逐行写入 `urls.txt`，然后执行：
+把 URL 逐行写入 `urls.txt`，然后执行：
 
-```bash
-npm run grab:file
+```powershell
+npm run grab:file -- -- --profile-dir="C:\tmp\feishu-profile" --out="C:\local_data\feishu-export\output"
 ```
 
-等价命令：
+### 抓取飞书云盘文件夹
 
-```bash
-npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --file=./urls.txt --out=./output
+```powershell
+npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --folder="https://xxx.feishu.cn/drive/folder/TOKEN" --out="C:\local_data\feishu-export\output"
 ```
 
-批量模式会先自动检查登录态：已登录则直接开始抓取，未登录则提示先在浏览器中完成登录。
+文件夹模式会：
+
+- 按层级创建目录
+- 导出文档 / 多维表格
+- 下载附件
+- 下载文档中的图片到 `assets/`
 
 ## 回归验证
 
 ### 一键回归
 
-```bash
+```powershell
 npm run test:all
 ```
 
-顺序执行：`build` → `test:normalize` → `test:docs:check`
-
 ### 结构归一化规则回归
 
-```bash
+```powershell
 npm run test:normalize
 ```
 
-覆盖以下归一化行为：
+### 真实文档结果检查
 
-- `分享者：...` 从标题降级为普通段落
-- `一、...` / `2、...` 从普通文本升格为标题
-- 连续 `（1）（2）（3）...` 折叠为有序列表
-- 孤立短项如 `（7）参观仓库` 保留为标题
-
-### 真实文档回归
-
-把需要测试的飞书文档 URL 放入 `urls.txt`，然后执行：
-
-```bash
+```powershell
 npm run test:docs:check
 ```
 
 如需详细调试日志：
 
-```bash
-FEISHU_EXPORT_DEBUG=1 npm run test:docs
+```powershell
+$env:FEISHU_EXPORT_DEBUG = '1'
+npm run test:docs -- -- --profile-dir="C:\tmp\feishu-profile" --out="C:\local_data\feishu-export\output"
 ```
 
 ## 浏览器登录态
 
-脚本会把 Chromium profile 保存到 `.playwright-profile/`。
+浏览器登录态保存在你传入的 `--profile-dir` 中。
 
-- 第一次运行通常需要手动登录飞书
-- 后续运行会自动复用登录态
+建议固定使用同一个目录，例如：
 
-## 支持的块类型
+```text
+C:\tmp\feishu-profile
+```
 
-### 已支持
+第一次运行通常需要手动登录飞书，后续会复用登录态。
 
-| 块类型 | 说明 |
-|--------|------|
-| heading | heading1–6，外加正文启发式升格 |
-| paragraph | 普通正文段落 |
-| ordered / bullet list | 基础列表，以及连续编号段落折叠 |
-| image | 下载到本地 assets/ 目录，Markdown 引用本地路径；表格内图片同样支持 |
-| sheet | 导出为飞书 base 链接，附带文本摘要；费用区间类 sheet 尝试恢复为 Markdown table |
-| divider | 保留为分隔线 |
-| code block | 保留语言标注，原样输出为 fenced code block |
-| table | 原生表格导出为 Markdown table；含图片的单元格以 `（图片）` 占位，图片附于表格后 |
+## 输出说明
 
-### 暂未支持
+### 文档
 
-| 块类型 | 说明 |
-|--------|------|
-| file / attachment | 通过 `--folder` 模式下载；单文档模式暂未支持 |
-| iframe / embed | 缺少稳定样本，暂未实现 |
-| todo list | 类型已预留，暂未专项提取 |
+输出为 Markdown，包含 frontmatter，例如：
+
+- `source_url`
+- `captured_at`
+- `title`
+
+### 多维表格
+
+输出两个文件：
+
+- `TOKEN_YYYY-MM-DD.md`
+- `TOKEN_YYYY-MM-DD.xlsx`
+
+当前单次最多导出 200 条记录（飞书接口限制）。
+
+## 已知限制
+
+- 单文档模式暂不单独下载普通附件；附件下载主要走 `--folder` 模式
+- `iframe / embed` 暂未实现
+- `todo list` 暂未专项提取

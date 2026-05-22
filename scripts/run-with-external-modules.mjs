@@ -9,9 +9,9 @@ function fail(message) {
 }
 
 function readExternalNodeModulesDir() {
-  const value = process.env.FEISHU_EXPORT_NODE_MODULES?.trim();
+  const value = process.env.EXTERNAL_NODE_MODULES?.trim();
   if (!value) {
-    fail('缺少 FEISHU_EXPORT_NODE_MODULES。请把它设置为外部 node_modules 目录，例如 C:\\local_data\\feishu-export\\node_modules');
+    fail('缺少 EXTERNAL_NODE_MODULES。请把它设置为外部 node_modules 目录，例如 C:\\local_data\\<project-name>\\node_modules，或先运行 setenv 脚本');
   }
   return path.resolve(value);
 }
@@ -31,11 +31,17 @@ if (!fs.existsSync(tsxCliPath)) {
   fail(`未找到 tsx CLI: ${tsxCliPath}`);
 }
 
+const registerLoaderImport = `data:text/javascript,${encodeURIComponent(`
+import { register } from 'node:module';
+import { pathToFileURL } from 'node:url';
+register(${JSON.stringify(pathToFileURL(loaderPath).href)}, pathToFileURL('./'));
+`)}`;
+
 process.env.NODE_OPTIONS = [
   process.env.NODE_OPTIONS,
-  `--loader=${pathToFileURL(loaderPath).href}`,
+  `--import=${registerLoaderImport}`,
 ].filter(Boolean).join(' ');
-process.env.FEISHU_EXPORT_EXTERNAL_NODE_MODULES = externalNodeModulesDir;
+process.env.EXTERNAL_NODE_MODULES = externalNodeModulesDir;
 process.argv = [
   process.execPath,
   tsxCliPath,

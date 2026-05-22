@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const externalNodeModulesDir = process.env.FEISHU_EXPORT_EXTERNAL_NODE_MODULES;
+const externalNodeModulesDir = process.env.EXTERNAL_NODE_MODULES;
 
 function isBareSpecifier(specifier) {
   return !specifier.startsWith('.') && !specifier.startsWith('/') && !specifier.startsWith('node:') && !specifier.startsWith('file:');

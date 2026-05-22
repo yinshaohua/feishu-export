@@ -24,13 +24,19 @@
 
 ## 外部依赖准备
 
-当前约定的外部依赖目录是：
+外部依赖目录按当前项目目录名自动推导。当前项目名为 `feishu-export`，因此默认目录是：
 
 ```text
 C:\local_data\feishu-export\node_modules
 ```
 
-首次准备依赖：
+如果复制本项目目录并改名，例如 `my-project`，执行 `setenv` 后会自动使用：
+
+```text
+C:\local_data\my-project\node_modules
+```
+
+首次准备依赖时，`--prefix` 指向对应的项目外置根目录：
 
 ```powershell
 npm --prefix C:\local_data\feishu-export install

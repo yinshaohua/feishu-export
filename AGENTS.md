@@ -1,4 +1,4 @@
-当前项目的 `node_modules` 目录固定外置到项目外，采用与 `../UniCalendar` 相同的 PowerShell Profile 环境命令 `setenv` 设置环境变量。所有 Node.js 编译、测试、运行、安装依赖命令都需要先在项目根目录执行 `setenv`；如果当前机器没有全局 `setenv` 函数，才使用 fallback：`. ./setenv.ps1`。
+当前项目的 `node_modules` 目录固定外置到项目外，采用与 `../UniCalendar` 相同的 PowerShell Profile 环境命令 `setenv` 设置环境变量。所有 Node.js 编译、测试、运行、安装依赖命令都需要先在项目根目录执行 `setenv`。本项目不再支持仓库内 `setenv.ps1` 或 `setenv.cmd` fallback。
 
 当前目录不要产生 `node_modules` 目录。安装依赖使用 `npm run deps:install`，它会同步 npm manifest 并把依赖安装到 `C:/local_data/<project-name>`。
 

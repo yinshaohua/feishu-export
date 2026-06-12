@@ -6,7 +6,7 @@
 
 - 项目目录内不要保留 `node_modules`。
 - 不用 symlink / junction / mklink。
-- 优先使用 PowerShell Profile 函数 `setenv` 激活外置依赖环境，仓库内 `setenv.ps1` 只作为 fallback。
+- 只使用 PowerShell Profile 函数 `setenv` 激活外置依赖环境；本项目不提供也不支持仓库内 `setenv.ps1` / `setenv.cmd` fallback。
 - 不依赖 `NODE_PATH` 来解析 ESM 依赖：现代 ESM、`type: module`、tsx、ts-node、打包器通常不会可靠使用它。
 - 需要直接执行 TypeScript 入口的脚本必须通过项目 wrapper 显式定位外置 `tsx`，并注册外置依赖 loader 解析裸包导入。
 - 输出目录、缓存目录、浏览器 profile 也尽量外置。
@@ -23,19 +23,13 @@
 
 ## 环境初始化命令
 
-本项目与 `../UniCalendar` 一样，优先使用 PowerShell Profile 里的 `setenv` 函数。在新的 PowerShell 会话里，先在项目根目录执行：
+本项目与 `../UniCalendar` 一样，只使用 PowerShell Profile 里的 `setenv` 函数。在新的 PowerShell 会话里，先在项目根目录执行：
 
 ```powershell
 setenv
 ```
 
-如果当前机器还没有配置全局 `setenv` 函数，可以临时使用仓库内 fallback 脚本：
-
-```powershell
-. ./setenv.ps1
-```
-
-脚本会：
+该命令会：
 
 - 按当前项目目录名推导外置根目录，例如 `C:/local_data/my-project`
 - 创建外置根目录

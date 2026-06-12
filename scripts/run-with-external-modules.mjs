@@ -1,22 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import { createToolEnv, resolvePackageFile } from './with-external-node-modules.mjs';
 
 function fail(message) {
   console.error(`[external-modules] ${message}`);
   process.exit(1);
 }
 
-function readExternalNodeModulesDir() {
-  const value = process.env.EXTERNAL_NODE_MODULES?.trim();
-  if (!value) {
-    fail('缺少 EXTERNAL_NODE_MODULES。请把它设置为外部 node_modules 目录，例如 C:\\local_data\\<project-name>\\node_modules，或先运行 setenv 脚本');
-  }
-  return path.resolve(value);
-}
-
-const externalNodeModulesDir = readExternalNodeModulesDir();
 const target = process.argv[2];
 const passthroughArgs = process.argv.slice(3);
 
@@ -24,29 +17,36 @@ if (!target) {
   fail('缺少目标入口。用法：node scripts/run-with-external-modules.mjs <entry.ts> [...args]');
 }
 
-const tsxCliPath = path.join(externalNodeModulesDir, 'tsx', 'dist', 'cli.mjs');
-const loaderPath = path.join(process.cwd(), 'scripts', 'external-modules-loader.mjs');
-
-if (!fs.existsSync(tsxCliPath)) {
-  fail(`未找到 tsx CLI: ${tsxCliPath}`);
+let tsxPath;
+try {
+  tsxPath = resolvePackageFile('tsx', 'dist/loader.mjs');
+} catch (error) {
+  fail(error.message);
 }
 
-const registerLoaderImport = `data:text/javascript,${encodeURIComponent(`
-import { register } from 'node:module';
-import { pathToFileURL } from 'node:url';
-register(${JSON.stringify(pathToFileURL(loaderPath).href)}, pathToFileURL('./'));
-`)}`;
+if (!fs.existsSync(tsxPath)) {
+  fail(`未找到 tsx ESM loader：${tsxPath}`);
+}
 
-process.env.NODE_OPTIONS = [
-  process.env.NODE_OPTIONS,
-  `--import=${registerLoaderImport}`,
-].filter(Boolean).join(' ');
-process.env.EXTERNAL_NODE_MODULES = externalNodeModulesDir;
-process.argv = [
-  process.execPath,
-  tsxCliPath,
-  target,
+const targetPath = path.resolve(target);
+if (!fs.existsSync(targetPath)) {
+  fail(`未找到目标入口：${targetPath}`);
+}
+
+const externalLoaderUrl = pathToFileURL(path.resolve('scripts/external-modules-loader.mjs')).href;
+const externalLoaderRegister = `data:text/javascript,${encodeURIComponent(`import { register } from 'node:module'; import { pathToFileURL } from 'node:url'; register(${JSON.stringify(externalLoaderUrl)}, pathToFileURL('./'));`)}`;
+const result = spawnSync(process.execPath, [
+  '--import', pathToFileURL(tsxPath).href,
+  '--import', externalLoaderRegister,
+  targetPath,
   ...passthroughArgs,
-];
+], {
+  stdio: 'inherit',
+  env: createToolEnv(),
+});
 
-await import(pathToFileURL(tsxCliPath).href);
+if (result.error) {
+  fail(result.error.message);
+}
+
+process.exit(result.status ?? 1);

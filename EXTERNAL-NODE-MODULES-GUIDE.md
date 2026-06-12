@@ -6,8 +6,9 @@
 
 - 项目目录内不要保留 `node_modules`。
 - 不用 symlink / junction / mklink。
-- 不依赖 `NODE_PATH`：现代 ESM、`type: module`、tsx、ts-node、打包器通常不会可靠使用它。
-- 让 npm 脚本主动指定外置依赖位置。
+- 优先使用 PowerShell Profile 函数 `setenv` 激活外置依赖环境，仓库内 `setenv.ps1` 只作为 fallback。
+- 不依赖 `NODE_PATH` 来解析 ESM 依赖：现代 ESM、`type: module`、tsx、ts-node、打包器通常不会可靠使用它。
+- 需要直接执行 TypeScript 入口的脚本必须通过项目 wrapper 显式定位外置 `tsx`，并注册外置依赖 loader 解析裸包导入。
 - 输出目录、缓存目录、浏览器 profile 也尽量外置。
 
 ## 推荐目录
@@ -20,20 +21,18 @@
 缓存：C:\local_data\my-project\.cache
 ```
 
-## 环境初始化脚本
+## 环境初始化命令
 
-本项目提供 `setenv.ps1` 和 `setenv.cmd`。在新的终端会话里，先在项目根目录执行初始化脚本。
+本项目与 `../UniCalendar` 一样，优先使用 PowerShell Profile 里的 `setenv` 函数。在新的 PowerShell 会话里，先在项目根目录执行：
 
-PowerShell：
+```powershell
+setenv
+```
+
+如果当前机器还没有配置全局 `setenv` 函数，可以临时使用仓库内 fallback 脚本：
 
 ```powershell
 . ./setenv.ps1
-```
-
-cmd：
-
-```cmd
-setenv.cmd
 ```
 
 脚本会：
@@ -42,118 +41,93 @@ setenv.cmd
 - 创建外置根目录
 - 同步 `package.json`、`package-lock.json`、`.npmrc` 到外置根目录
 - 设置 `EXTERNAL_NODE_MODULES` 和 `NODE_PATH`
-- 把 `C:/local_data/my-project/node_modules/.bin` 放到当前会话的 `PATH` 最前面
+- 把外置 `node_modules/.bin` 放到当前会话的 `PATH` 最前面
 
-脚本是幂等的：同一个会话里重复执行不会反复追加相同的 `.bin` 路径；如果项目依赖声明发生变化，重复执行会重新同步 manifest。
+> `NODE_PATH` 只用于兼容少量 CommonJS 工具；本项目的 ESM/TypeScript 运行入口不依赖它。
 
-## package.json 要点
+## TypeScript 和 ESM 运行规则
 
-把 npm 的安装位置指向外部目录：
+本项目和普通 CommonJS 项目不同，源码直接通过 `tsx` 运行 `.ts` 入口，并且源码里有 `import ... from 'playwright'`、`import ... from 'exceljs'` 这类裸包导入。Node ESM/`tsx` 不会可靠使用 `NODE_PATH`，所以仅把外置 `.bin` 放到 `PATH` 还不够。
 
-```json
-{
-  "scripts": {
-    "deps:install": "npm install --prefix C:/local_data/my-project",
-    "deps:clean": "rimraf C:/local_data/my-project/node_modules",
-    "build": "node --import C:/local_data/my-project/node_modules/tsx/dist/loader.mjs src/cli.ts",
-    "start": "node --import C:/local_data/my-project/node_modules/tsx/dist/loader.mjs src/cli.ts",
-    "test": "node --import C:/local_data/my-project/node_modules/tsx/dist/loader.mjs --test test/*.ts"
-  },
-  "devDependencies": {
-    "tsx": "..."
+必须遵守：
+
+- 运行 CLI 或测试时使用 `npm run grab*`、`npm run test:*`，不要直接执行 `tsx src/cli.ts` 或 `node src/cli.ts`。
+- 运行 wrapper 使用 `scripts/run-with-external-modules.mjs`，它会注册外置 `tsx` loader 和 `scripts/external-modules-loader.mjs`，把裸包导入解析到 `EXTERNAL_NODE_MODULES`。
+- 构建使用 `npm run build`，它通过 `scripts/run-tool.mjs` 显式解析外置 TypeScript，并生成临时 `.tsconfig.external-node-modules.json` 注入外置类型入口。
+- 如果新增新的运行时依赖裸包导入，需要确认 `scripts/external-modules-loader.mjs` 能从外置包的 `exports` / `main` / `index.js` 解析它；如果新增新的构建期类型依赖，需要同步检查 `scripts/run-tool.mjs` 的类型入口映射。
+
+## 如果需要编写新的 `setenv` 命令
+
+把下面函数放到 PowerShell Profile（查看路径：`$PROFILE`）中，重开 PowerShell 后即可在任意项目根目录执行 `setenv`：
+
+```powershell
+function setenv {
+  $ProjectRoot = Get-Location
+  $ProjectName = Split-Path -Leaf $ProjectRoot
+  $ExternalRoot = "C:/local_data/$ProjectName"
+  $ExternalNodeModules = "$ExternalRoot/node_modules"
+  $ExternalNodeBin = "$ExternalNodeModules/.bin"
+
+  New-Item -ItemType Directory -Force -Path $ExternalRoot | Out-Null
+
+  $ManifestFiles = @('package.json', 'package-lock.json', '.npmrc')
+  foreach ($FileName in $ManifestFiles) {
+    $Source = Join-Path $ProjectRoot $FileName
+    if (Test-Path $Source) {
+      Copy-Item -Path $Source -Destination (Join-Path $ExternalRoot $FileName) -Force
+    }
   }
+
+  $env:EXTERNAL_NODE_MODULES = $ExternalNodeModules
+  $env:NODE_PATH = $ExternalNodeModules
+
+  $ExistingPathEntries = $env:PATH -split ';' | Where-Object {
+    $_ -and ($_.TrimEnd('\/') -ine $ExternalNodeBin.TrimEnd('\/'))
+  }
+  $env:PATH = (@($ExternalNodeBin) + $ExistingPathEntries) -join ';'
+
+  Write-Host "Project root: $ProjectRoot"
+  Write-Host "External root: $ExternalRoot"
+  Write-Host "External node_modules: $ExternalNodeModules"
 }
 ```
 
-关键点：
+## 安装依赖
 
-- `npm install --prefix <外置目录>` 会把依赖装到外置目录。
-- 外置目录必须有 `package.json`；先执行本项目的 `setenv` 脚本会自动同步 npm manifest。
-- 运行 TypeScript 时，不要写 `tsx src/cli.ts`，而是显式引用外置 `tsx` loader。
-- 如果运行纯 JS，可以直接 `node src/index.js`；但它依赖的包仍需能从入口处被解析到，复杂项目建议用 wrapper。
+首次安装或同步依赖：
 
-## 更稳的 wrapper 方式
-
-创建 `scripts/run.mjs`，从外置目录启动真实入口：
-
-```js
-import { spawnSync } from 'node:child_process';
-
-const root = 'C:/local_data/my-project';
-const loader = `${root}/node_modules/tsx/dist/loader.mjs`;
-
-const result = spawnSync(process.execPath, ['--import', loader, 'src/cli.ts', ...process.argv.slice(2)], {
-  stdio: 'inherit',
-  cwd: process.cwd(),
-  env: {
-    ...process.env,
-    npm_config_prefix: root,
-    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import ${loader}`.trim()
-  }
-});
-
-process.exit(result.status ?? 1);
+```powershell
+setenv
+npm run deps:install
 ```
 
-然后：
+Playwright 浏览器二进制仍安装到外置 npm prefix：
 
-```json
-{
-  "scripts": {
-    "start": "node scripts/run.mjs",
-    "test": "node scripts/run.mjs --test"
-  }
-}
+```powershell
+npx --prefix C:\local_data\feishu-export playwright install chromium
 ```
 
-## TypeScript / 测试 / 工具
+如果项目目录改名，`setenv` 会自动按新目录名推导外置根目录。
 
-- `tsc`、`eslint`、`vitest`、`playwright` 等 CLI 不要假设本地 `./node_modules/.bin` 存在。
-- 调用方式优先用：`node <外置node_modules中的工具入口>`。
-- 如果工具必须通过 bin 启动，脚本中显式设置 `PATH=C:/local_data/my-project/node_modules/.bin;%PATH%`。
-- `tsconfig.json` 通常不用改；模块解析问题主要发生在运行时和 CLI 启动时。
+## 常用命令
 
-## 输出和缓存
+每次新终端先运行：
 
-所有会产生大量文件的路径都改成外置：
-
-```text
-outputDir: C:/local_data/my-project/output
-cacheDir:  C:/local_data/my-project/.cache
-profile:   C:/local_data/my-project/browser-profile
+```powershell
+setenv
 ```
 
-`.gitignore` 仍保留：
+然后使用普通 npm scripts：
 
-```gitignore
-node_modules/
-dist/
-output/
-.cache/
+```powershell
+npm run build
+npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/docx/AAA" --out="C:\local_data\feishu-export\output"
+npm run test:all
 ```
 
-## 迁移步骤
+## 与 UniCalendar 的差异
 
-1. 删除项目内 `node_modules`。
-2. 在项目根目录执行 `setenv` 脚本，创建外置目录并同步 npm manifest。
-3. 执行 `npm install --prefix <外置目录>`。
-4. 修改 npm scripts，禁止依赖 `./node_modules/.bin`。
-5. 把输出、缓存、profile 路径改到外置目录。
-6. 运行 `npm run start`、`npm test`、`npm run build` 验证。
-7. 在 README 写清外置目录约定。
-
-## 验收标准
-
-- 项目根目录没有 `node_modules`。
-- `npm run start` 可运行。
-- `npm test` 可运行。
-- 构建或导出产物写入外置目录。
-- 新 AI 只读 README/package.json 就能理解依赖位置。
-
-## 常见坑
-
-- `NODE_PATH` 对 ESM 不可靠，不作为主方案。
-- symlink/junction 会重新触发同步盘扫描，不推荐。
-- `npx xxx` 通常会找项目内依赖，不推荐。
-- 直接写 `tsx`、`vitest`、`playwright` 这类命令，通常隐含依赖 `./node_modules/.bin`。
-- 外置路径建议用正斜杠 `C:/...`，减少 Windows 转义问题。
+- `build` 已改成和 UniCalendar 一样依赖 `setenv` 注入的 `PATH`，直接执行 `tsc`。
+- `deps:install` 已改成同款 `external-npm.mjs` 流程，会把依赖安装到外置根目录。
+- 本项目的 CLI 和回归测试直接运行 `.ts` 文件，Node ESM 不会自动从外置目录解析 `tsx`，因此仍保留 `scripts/run-with-external-modules.mjs` wrapper 来显式启动外置 `tsx`。
+- 这不是新的环境命令需求；继续使用与 UniCalendar 相同的 `setenv` 即可。

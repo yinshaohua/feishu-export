@@ -14,7 +14,13 @@
 - **`node_modules` 放在项目目录外**
 - **输出目录放在项目目录外**
 
-每次打开新 PowerShell 会话后，先执行：
+每次打开新 PowerShell 会话后，先在项目根目录执行 PowerShell Profile 里的环境命令：
+
+```powershell
+setenv
+```
+
+如果当前机器还没有配置全局 `setenv` 函数，也可以临时使用仓库内 fallback 脚本：
 
 ```powershell
 . ./setenv.ps1
@@ -28,6 +34,8 @@
 - 把外置 `node_modules/.bin` 放到当前会话的 `PATH` 最前面
 
 同一个 PowerShell 会话里可以重复执行；脚本会先去重再更新 `PATH`，不会反复追加相同路径。之后所有 `npm run` 命令都按这套方式工作。
+
+> 注意：`NODE_PATH` 不能可靠解决 Node ESM / `tsx` 的裸包导入解析。本项目运行 `.ts` 入口时必须使用 `npm run grab*`、`npm run test:*` 这类 wrapper 脚本，不要直接执行 `tsx src/cli.ts` 或 `node src/cli.ts`。
 
 ## 外部依赖准备
 
@@ -43,19 +51,19 @@ C:\local_data\feishu-export\node_modules
 C:\local_data\my-project\node_modules
 ```
 
-首次准备依赖时，先运行 `setenv`，让脚本创建外置项目根目录并同步 npm manifest，然后 `--prefix` 指向对应的项目外置根目录：
+首次准备依赖时，先运行 `setenv`，让命令创建外置项目根目录并同步 npm manifest，然后使用项目脚本安装依赖：
 
 ```powershell
-. ./setenv.ps1
-npm --prefix C:\local_data\feishu-export install
+setenv
+npm run deps:install
 npx --prefix C:\local_data\feishu-export playwright install chromium
 ```
 
-> 不要直接在一个全新的空外置目录里运行 `npm --prefix ... install`。npm 需要外置根目录里存在 `package.json`；`setenv.ps1` 会自动从项目目录同步它。
+> 不要直接在一个全新的空外置目录里运行 `npm --prefix ... install`。npm 需要外置根目录里存在 `package.json`；`setenv` 和 `npm run deps:install` 都会自动从项目目录同步它。
 
 ## 常用命令
 
-> PowerShell 下统一使用 `npm run <script> -- -- <args>`。
+> PowerShell 下统一使用 `npm run <script> -- -- <args>`。这些脚本会显式注册外置依赖 loader，让 `playwright`、`exceljs` 等 ESM 裸包导入从外置 `node_modules` 解析。
 
 ### 抓取单个文档
 

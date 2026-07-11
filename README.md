@@ -19,6 +19,17 @@ npx playwright install chromium
 
 本项目不需要执行 `setenv` 或配置外置依赖环境变量。
 
+## 项目规划
+
+项目使用 `gsd-core` 管理规划，相关文件位于 [`.planning/`](./.planning/) 并纳入 Git 管理：
+
+- [`PROJECT.md`](./.planning/PROJECT.md)：项目范围、约束与关键决策
+- [`REQUIREMENTS.md`](./.planning/REQUIREMENTS.md)：需求及阶段追踪
+- [`ROADMAP.md`](./.planning/ROADMAP.md)：里程碑和阶段路线图
+- [`STATE.md`](./.planning/STATE.md)：当前工作状态与下一步
+
+旧 `.gsd/` 和 `.gsd.migrating/` 仅作为本地 `gsd-pi` 迁移备份，不参与当前规划，也不提交到仓库。
+
 ## 常用命令
 
 > 以下命令均在 WSL2 shell 中执行。npm 会从项目内的 `node_modules` 解析 `tsx`、`playwright` 和 `exceljs` 等依赖。

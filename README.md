@@ -6,75 +6,31 @@
 - 多维表格 → Markdown + Excel (`.xlsx`)
 - 文件夹 → 按目录层级导出文档并下载附件
 
-## 当前使用方式
+## 安装
 
-本项目默认采用：
-
-- **项目目录在 OneDrive 下**
-- **`node_modules` 放在项目目录外**
-- **输出目录放在项目目录外**
-
-每次打开新 PowerShell 会话后，先在项目根目录执行 PowerShell Profile 里的环境命令：
+在项目根目录安装依赖。依赖会写入当前项目的 `node_modules`，不需要执行 `setenv` 或配置外置依赖环境变量：
 
 ```powershell
-setenv
+npm install
+npx playwright install chromium
 ```
 
-如果当前机器还没有配置全局 `setenv` 函数，也可以临时使用仓库内 fallback 脚本：
-
-```powershell
-. ./setenv.ps1
-```
-
-它会：
-
-- 创建外置项目根目录，例如 `C:\local_data\feishu-export`
-- 同步 `package.json`、`package-lock.json`、`.npmrc` 到外置项目根目录
-- 设置外部依赖目录相关环境变量
-- 把外置 `node_modules/.bin` 放到当前会话的 `PATH` 最前面
-
-同一个 PowerShell 会话里可以重复执行；脚本会先去重再更新 `PATH`，不会反复追加相同路径。之后所有 `npm run` 命令都按这套方式工作。
-
-> 注意：`NODE_PATH` 不能可靠解决 Node ESM / `tsx` 的裸包导入解析。本项目运行 `.ts` 入口时必须使用 `npm run grab*`、`npm run test:*` 这类 wrapper 脚本，不要直接执行 `tsx src/cli.ts` 或 `node src/cli.ts`。
-
-## 外部依赖准备
-
-外部依赖目录按当前项目目录名自动推导。当前项目名为 `feishu-export`，因此默认目录是：
-
-```text
-C:\local_data\feishu-export\node_modules
-```
-
-如果复制本项目目录并改名，例如 `my-project`，执行 `setenv` 后会自动使用：
-
-```text
-C:\local_data\my-project\node_modules
-```
-
-首次准备依赖时，先运行 `setenv`，让命令创建外置项目根目录并同步 npm manifest，然后使用项目脚本安装依赖：
-
-```powershell
-setenv
-npm run deps:install
-npx --prefix C:\local_data\feishu-export playwright install chromium
-```
-
-> 不要直接在一个全新的空外置目录里运行 `npm --prefix ... install`。npm 需要外置根目录里存在 `package.json`；`setenv` 和 `npm run deps:install` 都会自动从项目目录同步它。
+如需完全按照 `package-lock.json` 重建依赖，可使用 `npm ci`。
 
 ## 常用命令
 
-> PowerShell 下统一使用 `npm run <script> -- -- <args>`。这些脚本会显式注册外置依赖 loader，让 `playwright`、`exceljs` 等 ESM 裸包导入从外置 `node_modules` 解析。
+> PowerShell 下统一使用 `npm run <script> -- -- <args>`。npm 会从项目内的 `node_modules` 解析 `tsx`、`playwright` 和 `exceljs` 等依赖。
 
 ### 抓取单个文档
 
 ```powershell
-npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/docx/AAA" --out="C:\local_data\feishu-export\output"
+npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/docx/AAA" --out=./output
 ```
 
 ### 抓取多维表格
 
 ```powershell
-npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/base/TOKEN?table=tblXxx&view=vewXxx" --out="C:\local_data\feishu-export\output"
+npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/base/TOKEN?table=tblXxx&view=vewXxx" --out=./output
 ```
 
 > URL 含 `&` 时必须加引号。
@@ -82,7 +38,7 @@ npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feis
 ### 交互式连续抓取
 
 ```powershell
-npm run grab:interactive -- -- --profile-dir="C:\tmp\feishu-profile" --out="C:\local_data\feishu-export\output"
+npm run grab:interactive -- -- --profile-dir="C:\tmp\feishu-profile" --out=./output
 ```
 
 ### 批量抓取
@@ -90,13 +46,13 @@ npm run grab:interactive -- -- --profile-dir="C:\tmp\feishu-profile" --out="C:\l
 把 URL 逐行写入 `urls.txt`，然后执行：
 
 ```powershell
-npm run grab:file -- -- --profile-dir="C:\tmp\feishu-profile" --out="C:\local_data\feishu-export\output"
+npm run grab:file -- -- --profile-dir="C:\tmp\feishu-profile" --out=./output
 ```
 
 ### 抓取飞书云盘文件夹
 
 ```powershell
-npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --folder="https://xxx.feishu.cn/drive/folder/TOKEN" --out="C:\local_data\feishu-export\output"
+npm run grab -- -- --profile-dir="C:\tmp\feishu-profile" --folder="https://xxx.feishu.cn/drive/folder/TOKEN" --out=./output
 ```
 
 文件夹模式会：
@@ -130,7 +86,7 @@ npm run test:docs:check
 
 ```powershell
 $env:FEISHU_EXPORT_DEBUG = '1'
-npm run test:docs -- -- --profile-dir="C:\tmp\feishu-profile" --out="C:\local_data\feishu-export\output"
+npm run test:docs -- -- --profile-dir="C:\tmp\feishu-profile" --out=./output
 ```
 
 ## 浏览器登录态

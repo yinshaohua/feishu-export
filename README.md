@@ -8,14 +8,14 @@
 
 ## 安装
 
-本项目以 WSL2 作为主要开发和运行环境。在 WSL2 shell 中进入项目根目录并安装依赖，依赖会写入当前项目的 `node_modules`：
+本项目以 Windows PowerShell 作为主要开发和运行环境。在 PowerShell 中进入项目根目录并安装依赖，依赖会写入当前项目的 `node_modules`：
 
-```bash
-npm install
+```powershell
+npm run deps:install
 npx playwright install chromium
 ```
 
-不要使用 Windows 的 `node.exe`、`npm.cmd` 或 PowerShell 安装依赖。Windows 和 WSL2 的原生包不能混用；如果曾经用 Windows npm 安装过依赖，请在 WSL2 中执行 `npm ci` 完整重建。
+如果曾经用 WSL2 安装过依赖，请在 PowerShell 中执行 `npm ci` 完整重建，避免混用 Windows 和 Linux 原生包。
 
 本项目不需要执行 `setenv` 或配置外置依赖环境变量。
 
@@ -32,40 +32,40 @@ npx playwright install chromium
 
 ## 常用命令
 
-> 以下命令均在 WSL2 shell 中执行。npm 会从项目内的 `node_modules` 解析 `tsx`、`playwright` 和 `exceljs` 等依赖。
+> 以下命令均在 PowerShell 中执行。npm 会从项目内的 `node_modules` 解析 `tsx`、`playwright` 和 `exceljs` 等依赖。
 
 ### 抓取单个文档
 
-```bash
-npm run grab -- --profile-dir="$HOME/.local/share/feishu-export/browser-profile" --url="https://xxx.feishu.cn/docx/AAA" --out=./output
+```powershell
+npm run grab -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/docx/AAA" --out=".\output"
 ```
 
 ### 抓取多维表格
 
-```bash
-npm run grab -- --profile-dir="$HOME/.local/share/feishu-export/browser-profile" --url="https://xxx.feishu.cn/base/TOKEN?table=tblXxx&view=vewXxx" --out=./output
+```powershell
+npm run grab -- --profile-dir="C:\tmp\feishu-profile" --url="https://xxx.feishu.cn/base/TOKEN?table=tblXxx&view=vewXxx" --out=".\output"
 ```
 
 > URL 含 `&` 时必须加引号。
 
 ### 交互式连续抓取
 
-```bash
-npm run grab:interactive -- --profile-dir="$HOME/.local/share/feishu-export/browser-profile" --out=./output
+```powershell
+npm run grab:interactive -- --profile-dir="C:\tmp\feishu-profile" --out=".\output"
 ```
 
 ### 批量抓取
 
 把 URL 逐行写入 `urls.txt`，然后执行：
 
-```bash
-npm run grab:file -- --profile-dir="$HOME/.local/share/feishu-export/browser-profile" --out=./output
+```powershell
+npm run grab:file -- --profile-dir="C:\tmp\feishu-profile" --out=".\output"
 ```
 
 ### 抓取飞书云盘文件夹
 
-```bash
-npm run grab -- --profile-dir="$HOME/.local/share/feishu-export/browser-profile" --folder="https://xxx.feishu.cn/drive/folder/TOKEN" --out=./output
+```powershell
+npm run grab -- --profile-dir="C:\tmp\feishu-profile" --folder="https://xxx.feishu.cn/drive/folder/TOKEN" --out=".\output"
 ```
 
 文件夹模式会：
@@ -79,26 +79,27 @@ npm run grab -- --profile-dir="$HOME/.local/share/feishu-export/browser-profile"
 
 ### 一键回归
 
-```bash
+```powershell
 npm run test:all
 ```
 
 ### 结构归一化规则回归
 
-```bash
+```powershell
 npm run test:normalize
 ```
 
 ### 真实文档结果检查
 
-```bash
+```powershell
 npm run test:docs:check
 ```
 
 如需详细调试日志：
 
-```bash
-FEISHU_EXPORT_DEBUG=1 npm run test:docs -- --profile-dir="$HOME/.local/share/feishu-export/browser-profile" --out=./output
+```powershell
+$env:FEISHU_EXPORT_DEBUG = '1'
+npm run test:docs -- --profile-dir="C:\tmp\feishu-profile" --out=".\output"
 ```
 
 ## 浏览器登录态
@@ -108,7 +109,7 @@ FEISHU_EXPORT_DEBUG=1 npm run test:docs -- --profile-dir="$HOME/.local/share/fei
 建议固定使用同一个目录，例如：
 
 ```text
-~/.local/share/feishu-export/browser-profile
+C:\tmp\feishu-profile
 ```
 
 第一次运行通常需要手动登录飞书，后续会复用登录态。

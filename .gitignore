@@ -2,7 +2,6 @@ node_modules/
 dist/
 .playwright-profile/
 output/
-.tsconfig.external-node-modules.json
 
 # GSD runtime directory
 .gsd.migrating/

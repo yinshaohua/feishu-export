@@ -3,14 +3,18 @@ dist/
 .playwright-profile/
 output/
 
-# GSD runtime directory
+# gsd-core planning artifacts are project source and must be tracked.
+!.planning/
+!.planning/**
+
+# Legacy gsd-pi migration/runtime backup (local only)
 .gsd.migrating/
 
 # URL list variants (keep urls.txt, ignore dated variants)
 urls-*.txt
 usrs/
 
-# ── GSD baseline (auto-generated) ──
+# Local GSD runtime and tool state (auto-generated)
 .gsd
 .gsd-id
 .mcp.json
